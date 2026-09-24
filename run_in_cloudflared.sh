@@ -19,6 +19,15 @@ if ! grep -q '^MulticastDNS=yes' /etc/systemd/resolved.conf; then
     echo "MulticastDNS=yes" >> /etc/systemd/resolved.conf
 fi
 
+echo "==> Configuring global mDNS drop-in override..."
+# Drop-ins in /etc/ override vendor defaults in /usr/lib/
+mkdir -p /etc/systemd/resolved.conf.d/
+cat > /etc/systemd/resolved.conf.d/99-force-mdns.conf << 'EOF'
+[Resolve]
+MulticastDNS=yes
+LLMNR=no
+EOF
+
 echo "==> Creating ifupdown sibling hook to override hardcoded mDNS disablements..."
 # This script runs alphabetically after the system's default "resolved" script
 # to immediately re-enable mDNS when interface settings change.
