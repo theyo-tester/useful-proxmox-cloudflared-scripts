@@ -1,12 +1,11 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# Script: setup_pve_isolated_bridge.sh
+# Script: auto_create_vmbr_cf_routing.sh
 # Purpose: Creates an isolated PVE Linux Bridge and attaches an interface to an LXC
 # ==============================================================================
 
 set -euo pipefail
 
-# Ensure running as root
 if [ "$EUID" -ne 0 ]; then
   echo "[-] Please run as root on your Proxmox VE host."
   exit 1
@@ -30,7 +29,7 @@ done
 read -rp "[?] Enter Linux Bridge name [Default: ${DEFAULT_BRIDGE}]: " USER_BRIDGE
 BRIDGE_NAME="${USER_BRIDGE:-$DEFAULT_BRIDGE}"
 
-if ip link show "$BRIDGE_NAME" >/dev/null 2>&1 || grep -q "iface $BRIDGE_NAME" /etc/network/interfaces 2>/dev/null; do
+if ip link show "$BRIDGE_NAME" >/dev/null 2>&1 || grep -q "iface $BRIDGE_NAME" /etc/network/interfaces 2>/dev/null; then
   echo "[-] Error: Bridge ${BRIDGE_NAME} is already in use on this system!"
   exit 1
 fi
@@ -47,9 +46,9 @@ check_ip_conflict() {
   subnet=$(echo "$test_ip" | cut -d. -f1-3)
   
   if ip addr show | grep -q "$test_ip" || ip route show | grep -q "${subnet}\."; then
-    return 0 # Conflict found
+    return 0
   fi
-  return 1 # Safe
+  return 1
 }
 
 if check_ip_conflict "$SUGGESTED_PVE_IP"; then
@@ -66,7 +65,6 @@ fi
 read -rp "[?] Enter Proxmox Host Bridge IP (CIDR /24) [Default: ${SUGGESTED_PVE_IP}/24]: " USER_PVE_IP
 PVE_BRIDGE_IP="${USER_PVE_IP:-${SUGGESTED_PVE_IP}/24}"
 
-# Extract base octets in case user entered a custom IP
 IFS='/' read -r IP_ONLY CIDR <<< "$PVE_BRIDGE_IP"
 BASE_OCTETS=$(echo "$IP_ONLY" | cut -d. -f1-3)
 SUGGESTED_LXC_IP="${BASE_OCTETS}.3"
@@ -76,7 +74,7 @@ SUGGESTED_LXC_IP="${BASE_OCTETS}.3"
 # ------------------------------------------------------------------------------
 echo ""
 echo "[*] Searching for 'cloudflared' container..."
-DETECTED_CT_ID=$(pct list | awk -v name="cloudflared" '$3 == name {print $1}')
+DETECTED_CT_ID=$(pct list 2>/dev/null | awk -v name="cloudflared" '$3 == name {print $1}')
 
 if [ -n "$DETECTED_CT_ID" ]; then
   echo "[+] Found container 'cloudflared' with ID: ${DETECTED_CT_ID}"
@@ -105,8 +103,7 @@ fi
 read -rp "[?] Enter LXC IP for bridge connection [Default: ${SUGGESTED_LXC_IP}/24]: " USER_LXC_IP
 LXC_BRIDGE_IP="${USER_LXC_IP:-${SUGGESTED_LXC_IP}/24}"
 
-# Parse clean host IP without subnet mask for hosts entry
-IFS='/' read -r HOST_PVE_IP _ <<< "$PVE_BRIDGE_IP"
+HOST_PVE_IP="$IP_ONLY"
 
 # ------------------------------------------------------------------------------
 # 5. Summary & Confirmation
@@ -147,7 +144,6 @@ ifup "${BRIDGE_NAME}" || ip link set "${BRIDGE_NAME}" up
 # ------------------------------------------------------------------------------
 # 7. Attach Network Interface to LXC Container
 # ------------------------------------------------------------------------------
-# Find next available net index (net0, net1, etc.)
 NEXT_NET_INDEX=0
 while grep -q "^net${NEXT_NET_INDEX}:" "/etc/pve/lxc/${CT_ID}.conf" 2>/dev/null; do
   ((NEXT_NET_INDEX++))
@@ -167,7 +163,6 @@ echo "[*] Updating /etc/hosts in LXC ${CT_ID}..."
 if pct status "$CT_ID" | grep -q "running"; then
   pct exec "$CT_ID" -- bash -c "grep -q 'px.local' /etc/hosts && sed -i 's/.*px.local.*/${HOST_ENTRY}/' /etc/hosts || echo '${HOST_ENTRY}' >> /etc/hosts"
 else
-  # Container stopped: edit rootfs directory directly
   ROOTFS_PATH="/var/lib/lxc/${CT_ID}/rootfs"
   if [ -f "${ROOTFS_PATH}/etc/hosts" ]; then
     if grep -q 'px.local' "${ROOTFS_PATH}/etc/hosts"; then
@@ -176,7 +171,7 @@ else
       echo "${HOST_ENTRY}" >> "${ROOTFS_PATH}/etc/hosts"
     fi
   else
-    echo "[!] Warning: Container host file not directly accessible. Start the container and manually add '${HOST_ENTRY}' to /etc/hosts."
+    echo "[!] Warning: Container host file not accessible. Add '${HOST_ENTRY}' manually inside CT."
   fi
 fi
 
