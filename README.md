@@ -41,6 +41,10 @@ Purpose: resolve local domains to their local IP in order to configure for tunne
 LXC Containers in Proxmox (or at least the Cloudflared container) is persistend agains mDNS.
 ## add_mDNS_to_proxmox.sh
 Purpose: make proxmox advertise its own local domain name to the lan, thus it can be found locally without specifying the IP. Needed in order for cloudflared to find it
+
+## grant-cert-access-to-container.sh
+This script grants a container access to a specified lineage directory by setting the appropriate ACL permissions. It validates inputs, checks for necessary commands, and ensures the existence of required certificate files.
+
 ## Hints 
 By using `add_mDNS_to_proxmox.sh` and `enable_mDNS_in_cloudflared.sh` in combination, you do NOT require a special bridge connection between Proxmox and the cloudflared LXC (like the one that gets created by `auto_create_vmbr_cf_routing.sh`). 
 Thus, either use the two scripts or the other.
