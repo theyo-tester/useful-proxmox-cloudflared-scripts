@@ -30,7 +30,8 @@ command -v pct >/dev/null || {
   exit 1
 }
 command -v setfacl >/dev/null || {
-  echo "setfacl not found; install the ACL utilities." >&2
+  echo "setfacl not found. Install ACL utilities with:" >&2
+  echo "  apt update && apt install -y acl" >&2
   exit 1
 }
 
